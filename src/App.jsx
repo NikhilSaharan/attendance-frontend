@@ -6,6 +6,10 @@ const API = "https://attendance-backend-8.onrender.com/api";
 export default function App() {
   const [user, setUser] = useState(null);
   const [config, setConfig] = useState(null);
+  const [showEarnings, setShowEarnings] = useState(false);
+  const [showPinInput, setShowPinInput] = useState(false);
+  const [enteredPin, setEnteredPin] = useState("");
+  const [pinError, setPinError] = useState("");
   const safeShift = config?.shiftHours || "00:00";
   const [logs, setLogs] = useState([]);
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -244,19 +248,19 @@ export default function App() {
         <div className="flex items-center gap-3">
           <div className="bg-indigo-600 p-2 rounded-xl text-white shadow-lg shadow-indigo-200 animate-pulse-slow"><Clock size={20} /></div>
           <h1 className="text-xl font-black italic tracking-tighter uppercase">Time<span className="text-indigo-600">Track</span></h1>
-          <button onClick={() => setIsSettingsOpen(true)} className="ml-2 p-2 text-slate-400 hover:bg-slate-100 hover:text-indigo-600 rounded-full transition-all duration-300 active:rotate-90"><Settings size={20} /></button>
+          <button onClick={() => setIsSettingsOpen(true)} className="ml-2 p-2 text-slate-400 hover:bg-slate-100 hover:text-indigo-600 rounded-full transition-all duration-300 active:rotate-90 cursor-pointer"><Settings size={20} /></button>
         </div>
         <div className="flex items-center gap-2 bg-slate-100/50 p-1 rounded-xl border border-slate-200">
-          <button onClick={() => setCurrentMonth(subMonths(currentMonth, 1))} className="p-1.5 hover:bg-white hover:shadow-sm rounded-lg transition-all active:scale-90"><ChevronLeft size={16} /></button>
+          <button onClick={() => setCurrentMonth(subMonths(currentMonth, 1))} className="p-1.5 hover:bg-white hover:shadow-sm rounded-lg transition-all active:scale-90 cursor-pointer"><ChevronLeft size={16} /></button>
           <span className="px-4 font-bold text-xs min-w-[100px] text-center">{format(currentMonth, 'MMMM yyyy')}</span>
-          <button onClick={() => setCurrentMonth(addMonths(currentMonth, 1))} className="p-1.5 hover:bg-white hover:shadow-sm rounded-lg transition-all active:scale-90"><ChevronRight size={16} /></button>
+          <button onClick={() => setCurrentMonth(addMonths(currentMonth, 1))} className="p-1.5 hover:bg-white hover:shadow-sm rounded-lg transition-all active:scale-90 cursor-pointer"><ChevronRight size={16} /></button>
         </div>
       </nav>
 
       {isSettingsOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-md transition-all animate-in fade-in duration-300">
           <div className="bg-white w-full max-w-md rounded-[2.5rem] p-10 shadow-2xl relative animate-in zoom-in-95 duration-300">
-            <button onClick={() => setIsSettingsOpen(false)} className="absolute top-8 right-8 text-slate-400 hover:text-rose-500 transition-colors"><X size={24} /></button>
+            <button onClick={() => setIsSettingsOpen(false)} className="absolute top-8 right-8 text-slate-400 hover:text-rose-500 transition-colors cursor-pointer"><X size={24} /></button>
             <h2 className="text-2xl font-black mb-8 text-slate-800 uppercase tracking-tighter">Edit Config</h2>
             <div className="space-y-6 text-left">
               <Input label="Shift Duration" value={config.shiftHours} onChange={v => handleTimeInput(v, 'shiftHours', (val) => setConfig({ ...config, shiftHours: val }))} />
@@ -269,11 +273,11 @@ export default function App() {
                 <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest block mb-3 ml-1">Saturday Policy</label>
                 <div className="grid grid-cols-2 gap-3">
                   {[['2nd4th', 'Alternate'], ['all', 'All Working']].map(([val, label]) => (
-                    <button key={val} onClick={() => setConfig({ ...config, saturdayRule: val })} className={`py-4 rounded-2xl font-black text-[10px] uppercase tracking-wider transition-all border-2 ${config.saturdayRule === val ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-100' : 'bg-slate-50 border-slate-100 text-slate-400 hover:border-slate-300'}`}>{label}</button>
+                    <button key={val} onClick={() => setConfig({ ...config, saturdayRule: val })} className={`py-4 rounded-2xl font-black text-[10px] uppercase tracking-wider transition-all border-2 cursor-pointer active:scale-95 ${config.saturdayRule === val ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-100' : 'bg-slate-50 border-slate-100 text-slate-400 hover:border-slate-300'}`}>{label}</button>
                   ))}
                 </div>
               </div>
-              <button onClick={() => { if (window.confirm("Everything will be deleted! Sure?")) { localStorage.clear(); window.location.reload(); } }} className="w-full text-rose-500 text-[10px] font-bold uppercase tracking-widest mt-2 hover:underline">Reset Everything</button>
+              <button onClick={() => { if (window.confirm("Everything will be deleted! Sure?")) { localStorage.clear(); window.location.reload(); } }} className="w-full text-rose-500 text-[10px] font-bold uppercase tracking-widest mt-2 hover:underline cursor-pointer">Reset Everything</button>
               <button onClick={async () => {
                 await fetch(`${API}/user/${user.id}`, {
                   method: "PUT",
@@ -290,12 +294,53 @@ export default function App() {
                 });
 
                 setIsSettingsOpen(false);
-              }} className="w-full bg-slate-900 text-white font-black py-5 rounded-2xl shadow-xl hover:bg-indigo-600 transition-all active:scale-[0.98] uppercase text-[11px] tracking-widest mt-4">Save Changes</button>
+              }} className="w-full bg-slate-900 text-white font-black py-5 rounded-2xl shadow-xl hover:bg-indigo-600 transition-all active:scale-[0.98] cursor-pointer  uppercase text-[11px] tracking-widest mt-4">Save Changes</button>
             </div>
           </div>
         </div>
       )}
+      {showPinInput && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black/50 z-50">
+          <div className="bg-white p-6 rounded-2xl w-80">
+            <h3 className="font-bold mb-4">Enter PIN</h3>
 
+            <input
+              type="password"
+              value={enteredPin}
+              onChange={(e) => setEnteredPin(e.target.value)}
+              className="w-full border p-2 rounded mb-2"
+              placeholder="Enter PIN"
+            />
+
+            {pinError && (
+              <p className="text-red-500 text-sm mb-2">{pinError}</p>
+            )}
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  if (enteredPin === user.pin.toString()) {
+                    setShowEarnings(true);
+                    setShowPinInput(false);
+                  } else {
+                    setPinError("Wrong PIN");
+                  }
+                }}
+                className="flex-1 bg-indigo-600 text-white py-2 rounded cursor-pointer hover:bg-indigo-700 transition-all active:scale-95"
+              >
+                Submit
+              </button>
+
+              <button
+                onClick={() => setShowPinInput(false)}
+                className="flex-1 bg-gray-300 py-2 rounded cursor-pointer hover:bg-gray-400 transition-all active:scale-95"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <main className="max-w-7xl mx-auto px-6 py-10 animate-in slide-in-from-bottom-4 duration-700">
         <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-10">
           <StatCard title="Required Hours" value={formatTime(targetMins)} icon={Calendar} color="text-slate-600" bg="bg-slate-100" />
@@ -318,7 +363,38 @@ export default function App() {
               </div>
             </div>
           </div>
-          <StatCard title="Earnings" value={`₹${Number(currentSalary).toLocaleString()}`} icon={Wallet} color="text-slate-700" bg="bg-slate-100" />
+          <div className="bg-white p-7 pt-10 rounded-[2.5rem] border border-slate-200 shadow-sm flex flex-col justify-between h-full">
+            <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest mt-4 mb-6">
+              Earnings
+            </p>
+
+            <p className={`text-3xl font-black tracking-tighter mb-6 ${showEarnings ? "text-slate-800" : "text-slate-400"
+              }`}>
+              {showEarnings
+                ? `₹${Number(currentSalary).toLocaleString()}`
+                : "****"}
+            </p>
+
+            {!showEarnings ? (
+              <button
+                onClick={() => {
+                  setShowPinInput(true);
+                  setEnteredPin("");
+                  setPinError("");
+                }}
+                className="mt-auto px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold cursor-pointer hover:bg-indigo-700 transition-all"
+              >
+                Show
+              </button>
+            ) : (
+              <button
+                onClick={() => setShowEarnings(false)}
+                className="mt-auto px-4 py-2 bg-gray-300 rounded-xl text-xs font-bold cursor-pointer hover:bg-gray-400 transition-all"
+              >
+                Hide
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
@@ -332,7 +408,7 @@ export default function App() {
               </h2>
               <form onSubmit={handleSave} className="space-y-6">
                 <Input label="Date" type="date" value={formData.date} onChange={v => setFormData({ ...formData, date: v })} />
-                <button type="button" onClick={() => setFormData({ ...formData, isCL: !formData.isCL })} className={`w-full py-4 rounded-2xl border-2 flex items-center justify-center gap-2 transition-all duration-300 active:scale-[0.98] ${formData.isCL ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-200' : 'bg-slate-50 border-slate-100 text-slate-400 hover:border-slate-300'}`}>
+                <button type="button" onClick={() => setFormData({ ...formData, isCL: !formData.isCL })} className={`w-full py-4 rounded-2xl border-2 flex items-center justify-center gap-2 transition-all duration-300 active:scale-[0.98] cursor-pointer hover:shadow-md ${formData.isCL ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-200' : 'bg-slate-50 border-slate-100 text-slate-400 hover:border-slate-300'}`}>
                   <Coffee size={18} className={formData.isCL ? "animate-bounce" : ""} />
                   <span className="text-[11px] font-black uppercase tracking-widest">{formData.isCL ? 'Leave Selected' : 'Mark as Leave (Manual)'}</span>
                 </button>
@@ -349,8 +425,8 @@ export default function App() {
                   </div>
                 )}
                 <div className="flex gap-3">
-                  {editingId && <button type="button" onClick={() => { setEditingId(null); setFormData({ date: format(new Date(), 'yyyy-MM-dd'), inTime: '', outTime: '', isCL: false, inPeriod: 'AM', outPeriod: 'PM' }); }} className="flex-1 bg-slate-100 text-slate-500 font-black py-5 rounded-2xl hover:bg-slate-200 transition-all uppercase text-[11px] tracking-widest">Cancel</button>}
-                  <button type="submit" className={`flex-[2] text-white font-black py-5 rounded-2xl shadow-xl transition-all active:scale-[0.98] uppercase text-[11px] tracking-widest ${editingId ? 'bg-orange-500 hover:bg-orange-600 shadow-orange-200' : 'bg-slate-900 hover:bg-indigo-600 shadow-indigo-200'}`}>
+                  {editingId && <button type="button" onClick={() => { setEditingId(null); setFormData({ date: format(new Date(), 'yyyy-MM-dd'), inTime: '', outTime: '', isCL: false, inPeriod: 'AM', outPeriod: 'PM' }); }} className="flex-1 bg-slate-100 text-slate-500 font-black py-5 rounded-2xl hover:bg-slate-200 transition-all cursor-pointer uppercase text-[11px] tracking-widest">Cancel</button>}
+                  <button type="submit" className={`flex-[2] text-white font-black py-5 rounded-2xl shadow-xl transition-all active:scale-[0.98] cursor-pointer uppercase text-[11px] tracking-widest ${editingId ? 'bg-orange-500 hover:bg-orange-600 shadow-orange-200' : 'bg-slate-900 hover:bg-indigo-600 shadow-indigo-200'}`}>
                     {editingId ? 'Update Entry' : 'Save Entry'}
                   </button>
                 </div>
@@ -360,10 +436,10 @@ export default function App() {
 
           <div className="lg:col-span-8 space-y-6">
             <div className="flex items-center gap-2 bg-white/50 backdrop-blur-sm p-2 rounded-2xl border border-slate-200 w-fit shadow-sm">
-              <button onClick={() => setFilterType('all')} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300 active:scale-95 flex items-center gap-2 ${filterType === 'all' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400 hover:bg-white hover:text-slate-600'}`}>
+              <button onClick={() => setFilterType('all')} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300 active:scale-95 flex items-center gap-2 cursor-pointer hover:shadow-md ${filterType === 'all' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400 hover:bg-white hover:text-slate-600'}`}>
                 All Entries <span className={`px-2 py-0.5 rounded-md text-[8px] transition-colors ${filterType === 'all' ? 'bg-slate-700' : 'bg-slate-100'}`}>{filteredLogs.length}</span>
               </button>
-              <button onClick={() => setFilterType('short')} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300 active:scale-95 flex items-center gap-2 ${filterType === 'short' ? 'bg-rose-500 text-white shadow-lg shadow-rose-200' : 'text-slate-400 hover:bg-white hover:text-rose-500'}`}>
+              <button onClick={() => setFilterType('short')} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300 active:scale-95 flex items-center gap-2 cursor-pointer hover:shadow-md ${filterType === 'short' ? 'bg-rose-500 text-white shadow-lg shadow-rose-200' : 'text-slate-400 hover:bg-white hover:text-rose-500'}`}>
                 Short Leaves <span className={`px-2 py-0.5 rounded-md text-[8px] transition-colors ${filterType === 'short' ? 'bg-rose-700' : 'bg-slate-100'}`}>
                   {filteredLogs.filter(l => {
                     const [sh, sm] = (config?.shiftHours || "00:00").split(':').map(Number);
@@ -441,8 +517,8 @@ export default function App() {
                           </td>
                           <td className="px-8 py-6 text-right">
                             <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-2 group-hover:translate-x-0">
-                              <button onClick={() => handleEditInit(log)} className="p-2 text-slate-400 hover:bg-white hover:text-indigo-600 hover:shadow-sm rounded-xl transition-all active:scale-90"><Pencil size={16} /></button>
-                              <button onClick={() => handleDelete(log.id)} className="p-2 text-rose-300 hover:bg-white hover:text-rose-600 hover:shadow-sm rounded-xl transition-all active:scale-90"><Trash2 size={16} /></button>
+                              <button onClick={() => handleEditInit(log)} className="p-2 text-slate-400 hover:bg-white hover:text-indigo-600 hover:shadow-sm rounded-xl transition-all active:scale-90 cursor-pointer"><Pencil size={16} /></button>
+                              <button onClick={() => handleDelete(log.id)} className="p-2 text-rose-300 hover:bg-white hover:text-rose-600 hover:shadow-sm rounded-xl transition-all active:scale-90 cursor-pointer"><Trash2 size={16} /></button>
                             </div>
                           </td>
                         </tr>
@@ -654,7 +730,7 @@ text-center border border-emerald-100 animate-setupEntry">
             <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest block mb-3 ml-1">Saturday Policy</label>
             <div className="grid grid-cols-2 gap-3">
               {[['2nd4th', 'Alternate'], ['all', 'All Working']].map(([val, label]) => (
-                <button key={val} onClick={() => setData({ ...data, saturdayRule: val })} className={`py-4 rounded-2xl font-black text-[10px] uppercase tracking-wider transition-all border-2 active:scale-95 ${data.saturdayRule === val ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-100' : 'bg-slate-50 border-slate-100 text-slate-400 hover:border-slate-300'}`}>{label}</button>
+                <button key={val} onClick={() => setData({ ...data, saturdayRule: val })} className={`py-4 rounded-2xl font-black text-[10px] uppercase tracking-wider transition-all border-2 cursor-pointer active:scale-95 ${data.saturdayRule === val ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-100' : 'bg-slate-50 border-slate-100 text-slate-400 hover:border-slate-300'}`}>{label}</button>
               ))}
             </div>
           </div>
@@ -675,7 +751,10 @@ text-center border border-emerald-100 animate-setupEntry">
 const PeriodToggle = ({ value, onChange }) => (
   <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200 mb-0.5 shadow-inner">
     {['AM', 'PM'].map(p => (
-      <button key={p} type="button" onClick={() => onChange(p)} className={`px-3 py-3 rounded-xl text-[10px] font-black transition-all duration-300 ${value === p ? 'bg-white text-indigo-600 shadow-sm active:scale-90' : 'text-slate-400 hover:text-slate-600'}`}>{p}</button>
+      <button key={p} type="button" onClick={() => onChange(p)} className={`px-3 py-3 rounded-xl text-[10px] font-black transition-all duration-300 cursor-pointer active:scale-90 ${value === p
+        ? 'bg-white text-indigo-600 shadow-sm'
+        : 'text-slate-400 hover:text-slate-600 hover:bg-white'
+        }`}>{p}</button>
     ))}
   </div>
 );
@@ -683,7 +762,7 @@ const PeriodToggle = ({ value, onChange }) => (
 const Input = ({ label, value, onChange, type = "text", placeholder, maxLength }) => (
   <div className="w-full group">
     <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest block mb-2 ml-1 transition-colors group-focus-within:text-indigo-600">{label}</label>
-    <input type={type} value={value} placeholder={placeholder} maxLength={maxLength} onChange={e => onChange(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none transition-all font-bold text-slate-700 shadow-sm hover:border-slate-300" />
+    <input type={type} value={value} placeholder={placeholder} maxLength={maxLength} onChange={e => onChange(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition-all font-bold text-slate-700" />
   </div>
 );
 
