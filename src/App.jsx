@@ -4,6 +4,10 @@ import { calculateMonthlyTarget, formatTime } from './utils/dateHelpers';
 import { format, addMonths, subMonths, isSameMonth } from 'date-fns';
 const API = "https://attendance-backend-8.onrender.com/api";
 export default function App() {
+  const [resetting, setResetting] = useState(false);
+  const [configSaving, setConfigSaving] = useState(false);
+  const [toast, setToast] = useState({ message: "", type: "" });
+  const [saving, setSaving] = useState(false);
   const [user, setUser] = useState(null);
   const [config, setConfig] = useState(null);
   const [showEarnings, setShowEarnings] = useState(false);
@@ -29,12 +33,22 @@ export default function App() {
 
   useEffect(() => {
     const saved = localStorage.getItem("user");
+
     if (saved) {
       const parsed = JSON.parse(saved);
       setUser(parsed);
       setConfig(parsed);
     }
   }, []);
+  useEffect(() => {
+    if (toast.message) {
+      const timer = setTimeout(() => {
+        setToast({ message: "", type: "" });
+      }, 3000);
+
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
   useEffect(() => {
     if (!user) return;
 
@@ -98,48 +112,84 @@ export default function App() {
   };
 
   const applyShortLeave = async (id, type, hours) => {
-    setLogs(prev => prev.map(log => {
-      if (log.id === id) {
-        const [sh, sm] = (config?.shiftHours || "00:00").split(':').map(Number);
-        const shiftTargetMins = (sh * 60) + sm;
-        const gapMins = Math.max(0, shiftTargetMins - log.duration);
-        const appliedMins = hours * 60;
-        return { ...log, shortLeaveType: type, shortLeaveMins: Math.min(appliedMins, gapMins), appliedShortLeaveHours: hours };
-      }
-      return log;
-    }));
 
-    const key = type === 'CL' ? 'clHours' : 'elHours';
-    setConfig(prev => ({ ...prev, [key]: Math.max(0, prev[key] - hours) }));
-    await fetch(`${API}/attendance/apply-leave`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        attendanceId: id,
-        type: type,
-        hours: hours
-      })
-    });
+    try {
 
-    const res = await fetch(`${API}/attendance/${user.id}`);
-    const updated = await res.json();
-    setLogs(updated);
-    setShortLeaveSelection({ id: null, type: '', hours: 0 });
-  };
+      setLogs(prev => prev.map(log => {
+        if (log.id === id) {
+          const [sh, sm] = (config?.shiftHours || "00:00").split(':').map(Number);
+          const shiftTargetMins = (sh * 60) + sm;
+          const gapMins = Math.max(0, shiftTargetMins - log.duration);
+          const appliedMins = hours * 60;
+          return {
+            ...log,
+            shortLeaveType: type,
+            shortLeaveMins: Math.min(appliedMins, gapMins),
+            appliedShortLeaveHours: hours
+          };
+        }
+        return log;
+      }));
 
-  const handleDelete = async (id) => {
-    if (window.confirm("Delete entry?")) {
-      const logToDelete = logs.find(l => l.id === id);
-      if (logToDelete) restoreLeave(logToDelete);
-      await fetch(`${API}/attendance/${id}`, {
-        method: "DELETE"
+      const key = type === 'CL' ? 'clHours' : 'elHours';
+      setConfig(prev => ({
+        ...prev,
+        [key]: Math.max(0, prev[key] - hours)
+      }));
+
+      await fetch(`${API}/attendance/apply-leave`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          attendanceId: id,
+          type: type,
+          hours: hours
+        })
       });
 
       const res = await fetch(`${API}/attendance/${user.id}`);
       const updated = await res.json();
       setLogs(updated);
+
+      setShortLeaveSelection({ id: null, type: '', hours: 0 });
+
+      // ✅ SUCCESS TOAST
+      setToast({ message: "Leave hours added successfully", type: "success" });
+
+    } catch (err) {
+      console.error(err);
+
+      // ❌ ERROR TOAST
+      setToast({ message: "Failed to apply leave", type: "error" });
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (window.confirm("Delete entry?")) {
+
+      try {
+        const logToDelete = logs.find(l => l.id === id);
+        if (logToDelete) restoreLeave(logToDelete);
+
+        await fetch(`${API}/attendance/${id}`, {
+          method: "DELETE"
+        });
+
+        const res = await fetch(`${API}/attendance/${user.id}`);
+        const updated = await res.json();
+        setLogs(updated);
+
+        // ✅ SUCCESS TOAST
+        setToast({ message: "Entry deleted successfully", type: "success" });
+
+      } catch (err) {
+        console.error(err);
+
+        // ❌ ERROR TOAST
+        setToast({ message: "Failed to delete entry", type: "error" });
+      }
     }
   };
 
@@ -156,80 +206,92 @@ export default function App() {
     setFormData({ date: log.date, inTime: log.inTime || '', inPeriod: 'AM', outTime: log.outTime || '', outPeriod: 'PM', isCL: log.isCL });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
-
   const handleSave = async (e) => {
     e.preventDefault();
 
-    let duration = 0;
-    let displayTime = "";
+    if (saving) return;
+    setSaving(true);
 
-    if (!formData.isCL) {
-      let inMins = get24hMins(formData.inTime, formData.inPeriod);
-      let outMins = get24hMins(formData.outTime, formData.outPeriod);
+    try {
 
-      if (!formData.inTime.includes(':') || !formData.outTime.includes(':'))
-        return alert("Time sahi se bharein!");
+      let duration = 0;
 
-      duration = outMins - inMins;
+      if (!formData.isCL) {
+        let inMins = get24hMins(formData.inTime, formData.inPeriod);
+        let outMins = get24hMins(formData.outTime, formData.outPeriod);
 
-      if (duration <= 0)
-        return alert("Out Time, In Time se pehle nahi ho sakta!");
+        if (!formData.inTime.includes(':') || !formData.outTime.includes(':')) {
+          setSaving(false);
+          return alert("Please fill time correctly");
+        }
 
-      displayTime = `${formData.inTime} ${formData.inPeriod} - ${formData.outTime} ${formData.outPeriod}`;
-    } else {
-      duration = 0;
-      displayTime = "Marked Leave (Manual)";
-    }
+        duration = outMins - inMins;
 
-    if (!editingId) {
-      const exists = logs.find(l => l.date === formData.date);
-      if (exists) return alert("Entry already exists for this date!");
-    }
-    if (editingId) {
-      await fetch(`${API}/attendance/${editingId}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          date: formData.date,
-          inTime: formData.inTime,
-          outTime: formData.outTime,
-          duration
-        })
+        if (duration <= 0) {
+          setSaving(false);
+          return alert("Out time cannot be before in time");
+        }
+
+      } else {
+        duration = 0;
+      }
+
+      if (!editingId) {
+        const exists = logs.find(l => l.date === formData.date);
+        if (exists) {
+          setSaving(false);
+          return alert("Entry already exists for this date!");
+        }
+      }
+
+      if (editingId) {
+        await fetch(`${API}/attendance/${editingId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            date: formData.date,
+            inTime: formData.inTime,
+            outTime: formData.outTime,
+            duration
+          })
+        });
+      } else {
+        await fetch(`${API}/attendance`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: user.id,
+            date: formData.date,
+            inTime: formData.inTime,
+            outTime: formData.outTime,
+            duration
+          })
+        });
+      }
+
+      const res = await fetch(`${API}/attendance/${user.id}`);
+      const updated = await res.json();
+      setLogs(updated);
+
+      setEditingId(null);
+
+      setFormData({
+        date: format(new Date(), 'yyyy-MM-dd'),
+        inTime: '',
+        outTime: '',
+        isCL: false,
+        inPeriod: 'AM',
+        outPeriod: 'PM'
       });
-    } else {
-      await fetch(`${API}/attendance`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          userId: user.id,
-          date: formData.date,
-          inTime: formData.inTime,
-          outTime: formData.outTime,
-          duration,
-          shortLeaveMins: 0,
-          shortLeaveType: null
-        })
-      });
+
+      setToast({ message: editingId ? "Entry updated successfully" : "Entry added successfully", type: "success" });
+
+    } catch (err) {
+      console.error(err);
+      setToast({ message: "Something went wrong", type: "error" });
+    } finally {
+      setSaving(false);
     }
-
-    // reload logs
-    const res = await fetch(`${API}/attendance/${user.id}`);
-    const updated = await res.json();
-    setLogs(updated);
-    setEditingId(null);
-
-    setFormData({
-      date: format(new Date(), 'yyyy-MM-dd'),
-      inTime: '',
-      outTime: '',
-      isCL: false,
-      inPeriod: 'AM',
-      outPeriod: 'PM'
-    });
   };
 
   if (!config) return (
@@ -244,6 +306,24 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900 font-sans selection:bg-indigo-100 selection:text-indigo-700">
+      {toast.message && (
+        <div style={{
+          position: "fixed",
+          top: "20px",
+          left: "50%",
+          transform: "translateX(-50%)",
+          padding: "16px 24px",
+          borderRadius: "12px",
+          fontWeight: "bold",
+          color: "white",
+          background: toast.type === "success" ? "#22c55e" : "#ef4444",
+          boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
+          zIndex: 9999
+        }}>
+          {toast.message}
+        </div>
+      )}
+      {/* ✅ TOAST END */}
       <nav className="bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-50 px-6 py-4 flex justify-between items-center shadow-sm">
         <div className="flex items-center gap-3">
           <div className="bg-indigo-600 p-2 rounded-xl text-white shadow-lg shadow-indigo-200 animate-pulse-slow"><Clock size={20} /></div>
@@ -277,24 +357,74 @@ export default function App() {
                   ))}
                 </div>
               </div>
-              <button onClick={() => { if (window.confirm("Everything will be deleted! Sure?")) { localStorage.clear(); window.location.reload(); } }} className="w-full text-rose-500 text-[10px] font-bold uppercase tracking-widest mt-2 hover:underline cursor-pointer">Reset Everything</button>
               <button onClick={async () => {
-                await fetch(`${API}/user/${user.id}`, {
-                  method: "PUT",
-                  headers: {
-                    "Content-Type": "application/json"
-                  },
-                  body: JSON.stringify({
-                    shiftHours: config.shiftHours,
-                    salary: Number(config.salary),
-                    clHours: Number(config.clHours),
-                    elHours: Number(config.elHours),
-                    saturdayRule: config.saturdayRule
-                  })
-                });
 
-                setIsSettingsOpen(false);
-              }} className="w-full bg-slate-900 text-white font-black py-5 rounded-2xl shadow-xl hover:bg-indigo-600 transition-all active:scale-[0.98] cursor-pointer  uppercase text-[11px] tracking-widest mt-4">Save Changes</button>
+                if (resetting) return;
+
+                setResetting(true);
+
+                try {
+                  localStorage.clear();
+                  setToast({ message: "Data reset successfully", type: "success" });
+                  // optional delay for UX (so user sees "Resetting...")
+                  setTimeout(() => {
+                    window.location.reload();
+                  }, 1100);
+
+                } catch (err) {
+                  console.error(err);
+                  setToast({ message: "Failed to reset", type: "error" });
+                  setResetting(false);
+                }
+              }} disabled={resetting} className={`w-full text-[10px] font-bold uppercase tracking-widest mt-2 transition-all
+  ${resetting
+                  ? "text-gray-400 cursor-not-allowed"
+                  : "text-rose-500 hover:underline cursor-pointer"
+                }`}
+              >
+                {resetting ? "Resetting..." : "Reset Everything"}
+              </button>
+              <button onClick={async () => {
+
+                if (configSaving) return;
+                setConfigSaving(true);
+
+                try {
+                  const res = await fetch(`${API}/user/${user.id}`, {
+                    method: "PUT",
+                    headers: {
+                      "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                      shiftHours: config.shiftHours,
+                      salary: Number(config.salary),
+                      clHours: Number(config.clHours),
+                      elHours: Number(config.elHours),
+                      saturdayRule: config.saturdayRule
+                    })
+                  });
+
+                  if (!res.ok) {
+                    throw new Error("Update failed");
+                  }
+
+                  setIsSettingsOpen(false);
+
+                  setToast({ message: "User details updated successfully", type: "success" });
+
+                } catch (err) {
+                  console.error(err);
+                  setToast({ message: "Failed to update user details", type: "error" });
+                } finally {
+                  setConfigSaving(false);
+                }
+              }} disabled={configSaving} className={`w-full text-white font-black py-5 rounded-2xl shadow-xl transition-all active:scale-[0.98] uppercase text-[11px] tracking-widest mt-4 cursor-pointer
+  ${configSaving
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : "bg-slate-900 hover:bg-indigo-600"
+                }`}
+              >
+                {configSaving ? "Saving..." : "Save Changes"}</button>
             </div>
           </div>
         </div>
@@ -426,8 +556,18 @@ export default function App() {
                 )}
                 <div className="flex gap-3">
                   {editingId && <button type="button" onClick={() => { setEditingId(null); setFormData({ date: format(new Date(), 'yyyy-MM-dd'), inTime: '', outTime: '', isCL: false, inPeriod: 'AM', outPeriod: 'PM' }); }} className="flex-1 bg-slate-100 text-slate-500 font-black py-5 rounded-2xl hover:bg-slate-200 transition-all cursor-pointer uppercase text-[11px] tracking-widest">Cancel</button>}
-                  <button type="submit" className={`flex-[2] text-white font-black py-5 rounded-2xl shadow-xl transition-all active:scale-[0.98] cursor-pointer uppercase text-[11px] tracking-widest ${editingId ? 'bg-orange-500 hover:bg-orange-600 shadow-orange-200' : 'bg-slate-900 hover:bg-indigo-600 shadow-indigo-200'}`}>
-                    {editingId ? 'Update Entry' : 'Save Entry'}
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className={`flex-[2] text-white font-black py-5 rounded-2xl shadow-xl transition-all active:scale-[0.98] uppercase text-[11px] tracking-widest cursor-pointer
+  ${saving
+                        ? "bg-gray-400 cursor-not-allowed"
+                        : editingId
+                          ? "bg-orange-500 hover:bg-orange-600"
+                          : "bg-slate-900 hover:bg-indigo-600"
+                      }`}
+                  >
+                    {saving ? "Saving..." : (editingId ? "Update Entry" : "Save Entry")}
                   </button>
                 </div>
               </form>
@@ -572,6 +712,7 @@ export default function App() {
 
 function SetupScreen({ onComplete, handleTimeInput }) {
   const [toast, setToast] = useState({ message: "", type: "" });
+  const [loading, setLoading] = useState(false);
   useEffect(() => {
     if (toast.message) {
       const timer = setTimeout(() => {
@@ -588,90 +729,92 @@ function SetupScreen({ onComplete, handleTimeInput }) {
 
   const handleLogin = async () => {
 
-    if (data.phone.length !== 10) {
-      setToast({ message: "Please enter valid 10 digit mobile number", type: "error" });
-      return;
-    }
+    if (loading) return; // 🔥 prevents multiple clicks
+    setLoading(true);
 
-    if (data.pin.length !== 4) {
-      setToast({ message: "PIN must be 4 digits", type: "error" });
-      return;
-    }
-    const res = await fetch(`${API}/auth/login`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        phone: data.phone,
-        pin: data.pin
-      })
-    });
+    try {
 
-    // 🔴 LOGIN FAIL → TRY REGISTER
-    if (res.status === 401) {
+      if (data.phone.length !== 10) {
+        setToast({ message: "Please enter valid 10 digit mobile number", type: "error" });
+        setLoading(false);
+        return;
+      }
 
-      const registerRes = await fetch(`${API}/auth/register`, {
+      if (data.pin.length !== 4) {
+        setToast({ message: "PIN must be 4 digits", type: "error" });
+        setLoading(false);
+        return;
+      }
+
+      const res = await fetch(`${API}/auth/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          phoneNumber: data.phone,
-          pin: data.pin,
-          shiftHours: data.shiftHours,
-          salary: Number(data.salary),
-          clHours: Number(data.clHours),
-          elHours: Number(data.elHours),
-          saturdayRule: data.saturdayRule
+          phone: data.phone,
+          pin: data.pin
         })
       });
 
-      if (!registerRes.ok) {
-        const errText = await registerRes.text();
-        setToast({ message: errText, type: "error" });
-        return;
-      }
+      if (res.status === 401) {
 
-      const newUser = await registerRes.json();
+        const registerRes = await fetch(`${API}/auth/register`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            phoneNumber: data.phone,
+            pin: data.pin,
+            shiftHours: data.shiftHours,
+            salary: Number(data.salary),
+            clHours: Number(data.clHours),
+            elHours: Number(data.elHours),
+            saturdayRule: data.saturdayRule
+          })
+        });
 
-      setToast({ message: "Account created successfully!", type: "success" });
+        if (!registerRes.ok) {
+          const errText = await registerRes.text();
+          setToast({ message: errText, type: "error" });
+          setLoading(false);
+          return;
+        }
 
-      const fullUserRes = await fetch(`${API}/user/${newUser.id}`);
-      const fullUser = await fullUserRes.json();
+        const newUser = await registerRes.json();
 
-      setTimeout(() => {
+        const fullUserRes = await fetch(`${API}/user/${newUser.id}`);
+        const fullUser = await fullUserRes.json();
+
         onComplete(fullUser);
         localStorage.setItem("user", JSON.stringify(fullUser));
-      }, 1000);
-    }
-
-    // 🟢 LOGIN SUCCESS
-    else if (res.ok) {
-
-      const loginUser = await res.json();
-      const userObj = Array.isArray(loginUser) ? loginUser[0] : loginUser;
-
-      if (!userObj) {
-        setToast({ message: "Login failed", type: "error" });
-        return;
       }
 
-      setToast({ message: "Login successful!", type: "success" });
+      else if (res.ok) {
 
-      const fullUserRes = await fetch(`${API}/user/${userObj.id}`);
-      const fullUser = await fullUserRes.json();
+        const loginUser = await res.json();
+        const userObj = Array.isArray(loginUser) ? loginUser[0] : loginUser;
 
-      setTimeout(() => {
+        if (!userObj) {
+          setToast({ message: "Login failed", type: "error" });
+          setLoading(false);
+          return;
+        }
+
+        const fullUserRes = await fetch(`${API}/user/${userObj.id}`);
+        const fullUser = await fullUserRes.json();
+
         onComplete(fullUser);
         localStorage.setItem("user", JSON.stringify(fullUser));
-      }, 1000);
+      }
+
+    } catch (err) {
+      console.error(err);
+      setToast({ message: "Something went wrong", type: "error" });
     }
 
-    else {
-      const errText = await res.text();
-      setToast({ message: errText, type: "error" });
-    }
+    setLoading(false);
   };
   return (
 
@@ -736,11 +879,14 @@ text-center border border-emerald-100 animate-setupEntry">
           </div>
           <button
             onClick={handleLogin}
-            className="w-full bg-emerald-600 text-white py-3 rounded 
-  hover:bg-emerald-700 hover:shadow-xl hover:-translate-y-0.5
-  active:scale-95 transition-all duration-200 cursor-pointer"
+            disabled={loading}
+            className={`w-full py-3 rounded transition-all duration-200 
+    ${loading
+                ? "bg-gray-400 cursor-not-allowed"
+                : "bg-emerald-600 hover:bg-emerald-700 cursor-pointer"
+              }`}
           >
-            Dashboard
+            {loading ? "Please wait..." : "Dashboard"}
           </button>
         </div>
       </div>
