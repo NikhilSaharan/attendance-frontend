@@ -95,6 +95,64 @@ export default function App() {
   }, [filteredLogs, filterType, config]);
 
   const doneMins = useMemo(() => filteredLogs.reduce((s, l) => s + (l.duration || 0) + (l.shortLeaveMins || 0), 0), [filteredLogs]);
+  const entryBasedExpectedMins = useMemo(() => {
+    if (!config) return 0;
+
+    const totalDays = filteredLogs.length; // jitni entries hai
+
+    const [sh, sm] = (config?.shiftHours || "00:00").split(':').map(Number);
+    const shiftMins = (sh * 60) + sm;
+
+    return totalDays * shiftMins;
+  }, [filteredLogs, config]);
+
+  const entryBasedDiffMins = doneMins - entryBasedExpectedMins;
+  const remainingWorkingDays = useMemo(() => {
+    const today = new Date();
+    const end = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+
+    let count = 0;
+
+    for (let d = new Date(today); d <= end; d.setDate(d.getDate() + 1)) {
+      const day = d.getDay();
+
+      // Sunday skip
+      if (day === 0) continue;
+
+      // Saturday rule
+      if (day === 6 && config?.saturdayRule === "2nd4th") {
+        const week = Math.ceil(d.getDate() / 7);
+        if (week === 2 || week === 4) continue;
+      }
+
+      count++;
+    }
+
+    return count || 1;
+  }, [config]);
+
+  const perDayAdjustment = useMemo(() => {
+    if (!config) return { daily: 0, remaining: 0 };
+
+    const diff = entryBasedDiffMins;
+
+    if (diff === 0) return { daily: 0, remaining: 0 };
+
+    const absDiff = Math.abs(diff);
+
+    let perDay = Math.ceil(absDiff / remainingWorkingDays);
+
+    // max 54 mins
+    const cappedPerDay = Math.min(perDay, 54);
+
+    const totalCovered = cappedPerDay * remainingWorkingDays;
+    const stillLeft = absDiff - totalCovered;
+
+    return {
+      daily: diff < 0 ? cappedPerDay : -cappedPerDay,
+      remaining: diff < 0 ? stillLeft : 0
+    };
+  }, [entryBasedDiffMins, remainingWorkingDays, config]);
   const remainingMins = targetMins - doneMins;
 
   const currentSalary = useMemo(() => {
@@ -472,15 +530,29 @@ export default function App() {
         </div>
       )}
       <main className="max-w-7xl mx-auto px-6 py-10 animate-in slide-in-from-bottom-4 duration-700">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-10">
+        <div className="grid grid-cols-1 md:grid-cols-6 gap-6 mb-10">
           <StatCard title="Required Hours" value={formatTime(targetMins)} icon={Calendar} color="text-slate-600" bg="bg-slate-100" />
           <StatCard title="Logged Hours" value={formatTime(doneMins)} icon={CheckCircle2} color="text-emerald-600" bg="bg-emerald-50" />
           <StatCard title="Remaining Hours" value={formatTime(remainingMins)} icon={Timer} color={remainingMins > 0 ? "text-cyan-700" : "text-emerald-700"} bg={remainingMins > 0 ? "bg-cyan-50" : "bg-emerald-50"} />
+          <StatCard
+            title="Late Hours"
+            value={
+              entryBasedDiffMins >= 0
+                ? `+${formatTime(entryBasedDiffMins)}`
+                : formatTime(entryBasedDiffMins)
+            }
+            icon={Timer}
+            color={entryBasedDiffMins >= 0 ? "text-emerald-400" : "text-rose-400"}
+            bg={entryBasedDiffMins >= 0 ? "bg-emerald-100" : "bg-rose-100"}
+
+            entryBasedDiffMins={entryBasedDiffMins}
+            perDayAdjustment={perDayAdjustment}
+          />
           <div className="bg-white p-7 rounded-[2.5rem] border border-slate-200 shadow-sm flex flex-col justify-between group hover:border-amber-200 hover:shadow-xl hover:shadow-amber-500/5 transition-all duration-500">
             <div className="p-4 w-fit rounded-2xl mb-5 transition-transform group-hover:scale-110 group-hover:rotate-12 bg-amber-50 text-amber-600"><Coffee size={22} /></div>
             <div>
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 leading-none">Leave Balance</p>
-              <div className="flex items-center gap-5">
+              <div className="flex items-center gap-3 flex-wrap">
                 <div className="flex items-center gap-2">
                   <span className="text-[12px] font-black text-slate-500">CL</span>
                   <span className="text-2xl font-black tracking-tighter text-amber-600">{Math.floor(config.clHours || 0)}h</span>
@@ -912,12 +984,35 @@ const Input = ({ label, value, onChange, type = "text", placeholder, maxLength }
   </div>
 );
 
-const StatCard = ({ title, value, icon: Icon, color, bg, borderColor }) => (
+const StatCard = ({ title, value, icon: Icon, color, bg, borderColor, entryBasedDiffMins,
+  perDayAdjustment }) => (
   <div className={`bg-white p-7 rounded-[2.5rem] border border-slate-200 shadow-sm flex flex-col justify-between group transition-all duration-500 hover:shadow-xl hover:-translate-y-1 ${borderColor || 'hover:border-indigo-200'}`}>
     <div className={`p-4 w-fit rounded-2xl mb-5 transition-all duration-500 group-hover:scale-110 group-hover:rotate-6 shadow-sm ${bg} ${color}`}><Icon size={22} /></div>
     <div>
-      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 leading-none group-hover:text-indigo-500 transition-colors">{title}</p>
-      <p className={`text-3xl font-black tracking-tighter transition-all duration-300 group-hover:scale-105 origin-left ${color}`}>{value}</p>
+      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 leading-none group-hover:text-indigo-500 transition-colors">
+        {title}
+      </p>
+
+      <p className={`text-3xl font-black tracking-tighter whitespace-nowrap transition-all duration-300 group-hover:scale-105 origin-left text-left ${color}`}>
+        {value}
+      </p>
+
+      {title === "Late Hours" && entryBasedDiffMins !== 0 && (
+        <div className="text-[14px] mt-1 text-slate-500 font-semibold leading-tight">
+
+          <div>
+            Daily: {formatTime(Math.abs(perDayAdjustment.daily))}{" "}
+            {entryBasedDiffMins < 0 ? "extra" : "less"}
+          </div>
+
+          {entryBasedDiffMins < 0 && perDayAdjustment.remaining > 0 && (
+            <div className="text-rose-400">
+              Still: {formatTime(perDayAdjustment.remaining)} pending
+            </div>
+          )}
+
+        </div>
+      )}
     </div>
 
   </div>
