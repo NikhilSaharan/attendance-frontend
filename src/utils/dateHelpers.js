@@ -74,15 +74,14 @@ export const calculateMonthlyTarget = (currentMonth, config) => {
 
   const days = eachDayOfInterval({ start, end });
 
- 
+
 
   const workingDays = days.filter(d => isWorkingDay(d, config)).length;
 
-  const [h, m] = config.shiftHours.split(':').map(Number);
+  const [h, m, s] = config.shiftHours.split(':').map(Number);
+  const dailyMins = (h * 60) + (m || 0) + ((s || 0) / 60);
 
-  const dailyMins = (h * 60) + (m || 0);
 
- 
 
   return workingDays * dailyMins;
 
@@ -96,7 +95,7 @@ export const parseSmartTime = (timeStr, isOutTime = false) => {
 
   let [hours, minutes] = timeStr.split(':').map(Number);
 
- 
+
 
   // Smart PM logic: If out-time is 1-7, assume PM
 
@@ -113,15 +112,12 @@ export const parseSmartTime = (timeStr, isOutTime = false) => {
 
 
 export const formatTime = (totalMinutes) => {
-
   const isNegative = totalMinutes < 0;
-
   const absMins = Math.abs(totalMinutes);
 
   const h = Math.floor(absMins / 60);
-
   const m = Math.floor(absMins % 60);
+  const s = Math.round((absMins - Math.floor(absMins)) * 60);
 
-  return `${isNegative ? '-' : ''}${h}h ${m}m`;
-
+  return `${isNegative ? '-' : ''}${h}h ${m}m ${s}s`;
 };
