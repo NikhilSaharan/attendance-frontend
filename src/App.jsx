@@ -114,20 +114,37 @@ Based on this data, help me analyze my work performance.
 
   const handleTimeInput = (value, field, setterFunc) => {
     let digits = value.replace(/\D/g, '');
-    if (digits.length > 4) digits = digits.slice(0, 4);
-    let formatted = digits;
-    if (digits.length > 2) {
+
+    if (digits.length > 6) digits = digits.slice(0, 6);
+
+    let formatted = '';
+
+    if (digits.length <= 2) {
+      formatted = digits;
+    }
+    else if (digits.length <= 4) {
       let hrs = digits.slice(0, 2);
       let mins = digits.slice(2, 4);
+
       if (parseInt(hrs) > 12 && field !== 'shiftHours') hrs = "12";
       if (parseInt(mins) > 59) mins = "59";
+
       formatted = `${hrs}:${mins}`;
-    } else if (digits.length === 2 && value.length === 2) {
-      formatted = `${digits}:`;
     }
+    else {
+      let hrs = digits.slice(0, 2);
+      let mins = digits.slice(2, 4);
+      let secs = digits.slice(4, 6);
+
+      if (parseInt(hrs) > 12 && field !== 'shiftHours') hrs = "12";
+      if (parseInt(mins) > 59) mins = "59";
+      if (parseInt(secs) > 59) secs = "59";
+
+      formatted = `${hrs}:${mins}:${secs}`;
+    }
+
     setterFunc(formatted, field);
   };
-
 
   const filteredLogs = useMemo(() => logs.filter(log => isSameMonth(new Date(log.date), currentMonth)), [logs, currentMonth]);
   const targetMins = useMemo(() => {
@@ -887,7 +904,7 @@ function SetupScreen({ onComplete, handleTimeInput }) {
     }
   }, [toast]);
   const [data, setData] = useState({
-    shiftHours: '09:06', salary: '', clHours: '', elHours: '', saturdayRule: '2nd4th', phone: '',
+    shiftHours: '', salary: '', clHours: '', elHours: '', saturdayRule: '2nd4th', phone: '',
     pin: '',
   });
 
@@ -1027,7 +1044,7 @@ text-center border border-emerald-100 animate-setupEntry">
             className="w-full mb-3 p-3 border rounded"
           />
 
-          <Input label="Shift Duration" placeholder="09:06" value={data.shiftHours} onChange={v => handleTimeInput(v, 'shiftHours', (val) => setData({ ...data, shiftHours: val }))} />
+          <Input label="Shift Duration" placeholder="HH:mm:ss (e.g. 09:05:30)" value={data.shiftHours} onChange={v => handleTimeInput(v, 'shiftHours', (val) => setData({ ...data, shiftHours: val }))} />
           <div className="grid grid-cols-2 gap-4">
             <Input label="CL Hours" type="number" placeholder="12" value={data.clHours} onChange={v => setData({ ...data, clHours: v })} />
             <Input label="EL Hours" type="number" placeholder="24" value={data.elHours} onChange={v => setData({ ...data, elHours: v })} />
@@ -1078,14 +1095,13 @@ const Input = ({ label, value, onChange, type = "text", placeholder, maxLength }
 
 const StatCard = ({ title, value, icon: Icon, color, bg, borderColor, entryBasedDiffMins,
   perDayAdjustment }) => (
-  <div className={`bg-white p-7 rounded-[2.5rem] border border-slate-200 shadow-sm flex flex-col justify-between group transition-all duration-500 hover:shadow-xl hover:-translate-y-1 ${borderColor || 'hover:border-indigo-200'}`}>
-    <div className={`p-4 w-fit rounded-2xl mb-5 transition-all duration-500 group-hover:scale-110 group-hover:rotate-6 shadow-sm ${bg} ${color}`}><Icon size={22} /></div>
+  <div className={`bg-white px-5 py-6 rounded-[2.5rem] border border-slate-200 shadow-sm flex flex-col items-start gap-2 group transition-all duration-500 hover:shadow-xl hover:-translate-y-1 ${borderColor || 'hover:border-indigo-200'}`}>   <div className={`p-4 rounded-2xl mb-2 transition-all duration-500 group-hover:scale-110 group-hover:rotate-6 shadow-sm ${bg} ${color}`}><Icon size={22} /></div>
     <div>
-      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 leading-none group-hover:text-indigo-500 transition-colors">
+      <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest -ml-1">
         {title}
       </p>
 
-      <p className={`text-3xl font-black tracking-tighter whitespace-nowrap transition-all duration-300 group-hover:scale-105 origin-left text-left ${color}`}>
+      <p className={`text-3xl font-black tracking-tighter w-full text-left -ml-1 ${color}`}>
         {value}
       </p>
 
